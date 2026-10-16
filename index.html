@@ -1,17 +1,50 @@
 <!doctype html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#151819"><title>The Fifth Season</title><link rel="stylesheet" href="style.css"></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>The Fifth Season</title>
+  <link rel="stylesheet" href="font.css">
+  <link rel="stylesheet" href="style.css">
+</head>
 <body>
-<main id="game" aria-label="The Fifth Season 手势冒险游戏">
-<canvas id="world" aria-label="风雪森林游戏画面"></canvas>
-<header><a href="./" aria-label="重新开始">THE FIFTH SEASON<span>A QUIET JOURNEY THROUGH WINTER</span></a><nav><button id="sound" aria-label="开启声音">SOUND OFF</button><button id="help" aria-label="操作说明">?</button><button id="fullscreen" aria-label="全屏">⛶</button></nav></header>
-<section id="loader"><div class="load-title">The Fifth Season</div><div class="load-track"><canvas id="walkers" width="160" height="90"></canvas><i></i></div><p><span>GATHERING THE WINTER</span><span id="percent">0%</span></p></section>
-<section id="story" hidden><p class="eyebrow">PROLOGUE / 01</p><h1>Winter 2007...</h1><p class="story-line">The beginning of the story is usually bland...</p><p class="story-line chinese">故事的开始，往往平淡无奇。</p><button id="begin" class="continue">张开手掌，向右轻扫 <span>→</span><small>或点击这里，走入森林</small></button></section>
-<section id="tutorial" hidden><p class="eyebrow">LET YOUR HAND BECOME THE WIND</p><h1>Every journey begins<br>with a little movement.</h1><div class="instructions"><p><b>01 / 行走</b>张开手掌，向左或向右移动<br>手掌回到中心，旅人便会停下</p><p><b>02 / 跳跃</b>食指向上，越过积雪与溪流<br>收集十枚余烬，唤醒下一个季节</p></div><button id="play" class="continue">开始旅程 <span>→</span></button><p class="keyboard-note">也可使用 ← → / A D 行走 · ↑ / W / 空格跳跃</p></section>
-<section id="ending" hidden><p class="eyebrow">WINTER REMEMBERS YOU</p><h1>The Fifth Season</h1><p>你收集的微光，让冬天有了新的名字。</p><button id="restart" class="continue">再走一段路 <span>↺</span></button></section>
-<aside id="hud" hidden><div><span class="ember-icon">✧</span><span id="count">00</span><span class="total">/ 10</span></div><p id="chapter">01 — THE SILENT WOODS</p><button id="camera">开启手势摄像头 <span>↗</span></button></aside>
-<div id="camera-panel" hidden><video id="video" muted playsinline></video><div class="center-zone"></div><p id="gesture">将手掌放在画面中央</p><button id="close-camera" aria-label="关闭摄像头">×</button></div>
-<footer><span id="footer-label">AN INTERACTIVE TALE</span><span id="status" role="status">戴上耳机，让风带你出发</span><span>EST. 2007 <i>✧</i></span></footer>
-<div id="touch" hidden><button data-key="ArrowLeft" aria-label="向左走">←</button><button data-key="ArrowRight" aria-label="向右走">→</button><button data-key="Space" aria-label="跳跃">↑</button></div>
-<dialog id="help-dialog"><button id="close-help" aria-label="关闭">×</button><h2>Follow the quiet light.</h2><p>张开手掌：向左 / 向右移动控制行走，回到中心停止。食指单独向上伸直即可跳跃。</p><p>键盘：← → 或 A D 行走，↑ / W / 空格跳跃。触屏可使用底部方向键。</p><p>收集 10 枚余烬，再进入古树中的光门。跌落溪流会回到岸边，余烬会保留。</p><p>点击右下角开启摄像头。视频只在本机处理，不会上传。首次开启需要联网加载手势模型。</p></dialog>
-</main><script type="module" src="game.js"></script></body></html>
+  <main id="game" data-scene="loading" aria-label="The Fifth Season">
+    <canvas id="world" aria-label="Snowy forest game"></canvas>
+    <section id="loading" aria-label="Loading">
+      <div class="load-track"><div id="load-fill"></div><canvas id="walkers" width="240" height="130"></canvas></div>
+    </section>
+    <section id="title" hidden><h1>The Fifth Season</h1></section>
+    <section id="story" hidden>
+      <h1>Winter 2007....</h1>
+      <p>The begining of the story is usually bland...</p>
+    </section>
+    <section id="tutorial" hidden>
+      <h1>Control the villain with gestures</h1>
+      <p>Open your palm and move it to the left or right.<br>
+      Control the character to move left and right. When the palm returns to<br>
+      the central area, the character stops. Pointing up means jumping.</p>
+    </section>
+    <section id="mission" hidden><h1>Collect ten embers and reach the next season</h1></section>
+    <section id="ending" hidden><h1>The Fifth Season</h1><button id="restart" aria-label="Restart">↺</button></section>
+    <button id="next" hidden aria-label="Continue">→</button>
+    <output id="count" hidden aria-label="Embers collected">0 / 10</output>
+    <button id="camera" hidden aria-label="Enable hand gestures" title="开启手势摄像头">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>
+    </button>
+    <div id="camera-panel" hidden>
+      <video id="video" muted playsinline></video><div class="center-zone"></div>
+      <span id="hand-indicator" aria-label="Hand position">·</span><button id="close-camera" aria-label="Close camera">×</button>
+    </div>
+    <div id="touch" hidden>
+      <button data-key="ArrowLeft" aria-label="Walk left">←</button>
+      <button data-key="ArrowRight" aria-label="Walk right">→</button>
+      <button data-key="Space" aria-label="Jump">↑</button>
+    </div>
+    <p id="status" class="sr-only" role="status"></p>
+  </main>
+  <!-- Classic scripts also run when index.html is opened directly. -->
+  <script defer src="level.js"></script>
+  <script defer src="game.js"></script>
+</body>
+</html>

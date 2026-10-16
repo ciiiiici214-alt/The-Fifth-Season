@@ -1,45 +1,433 @@
-const $=s=>document.querySelector(s),canvas=$('#world'),ctx=canvas.getContext('2d');
-let W=0,H=0,dpr=1,state='loading',elapsed=0,last=0,cameraX=0,progress=0,loadingComplete=false,muted=true,audio,windGain;
-const keys=new Set(),hero={x:170,y:0,vy:0,face:1,ground:true},cat={x:105,y:0},collected=new Set();
-const WORLD=5400,GROUND=620,platforms=[[-400,840,620],[980,510,620],[1650,450,580],[2220,480,620],[2870,370,555],[3390,550,620],[4100,1500,620]];
-const embers=[{x:480,y:570},{x:760,y:535},{x:1130,y:565},{x:1440,y:535},{x:1810,y:525},{x:2410,y:565},{x:3015,y:500},{x:3610,y:555},{x:4300,y:555},{x:4790,y:545}];
-let handDir=0,handJump=false,landmarker,stream,videoFrame=-1,handTime=0,previousPalm=null,recognizing=false,cameraBusy=false;
-const rnd=(n)=>{const v=Math.sin(n*127.1+311.7)*43758.5453;return v-Math.floor(v)};
-function resize(){W=innerWidth;H=innerHeight;dpr=Math.min(devicePixelRatio,2);canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}
-addEventListener('resize',resize);resize();
-function show(next){state=next;for(const id of ['loader','story','tutorial','ending'])$('#'+id).hidden=id!==next;$('#hud').hidden=!['tutorial','playing'].includes(next);$('#touch').hidden=next!=='playing';$('#footer-label').textContent=next==='playing'?'FOLLOW THE LITTLE LIGHTS':'AN INTERACTIVE TALE';if(next==='playing'){hero.y=GROUND;hero.x=170;hero.vy=0;hero.ground=true;cat.x=105;cameraX=0}if(next==='story')$('#status').textContent='冬天，2007 年。故事从一场雪开始。';if(next==='playing')$('#status').textContent='← → 行走 · ↑ 跳跃 · 追随余烬'}
-function path(points,fill){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fillStyle=fill;ctx.fill()}
-function ellipse(x,y,rx,ry,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fill()}
-function person(c,x,y,size,t,moving,face=1){c.save();c.translate(x,y);c.scale(size*face,size);let step=moving?Math.sin(t*11)*7:0;c.strokeStyle='#202528';c.lineWidth=4;c.beginPath();c.moveTo(-2,-12);c.lineTo(-5-step,0);c.moveTo(3,-13);c.lineTo(7+step,0);c.stroke();c.fillStyle='#22272a';c.beginPath();c.moveTo(0,-46);c.quadraticCurveTo(-7,-29,-17+Math.sin(t*4)*3,-12);c.quadraticCurveTo(-2,-7,15,-12);c.lineTo(5,-45);c.fill();c.fillStyle='#eeeae3';c.beginPath();c.moveTo(-3,-44);c.bezierCurveTo(-20,-45,-24,-35,-39,-43+Math.sin(t*5)*4);c.bezierCurveTo(-24,-36,-13,-30,0,-40);c.fill();c.beginPath();c.arc(1,-52,8,0,Math.PI*2);c.fill();c.beginPath();c.moveTo(3,-59);c.lineTo(12,-50);c.lineTo(6,-48);c.fill();c.restore()}
-function kitty(c,x,y,size,t,moving){c.save();c.translate(x,y);c.scale(size,size);c.fillStyle='#282d30';c.beginPath();c.ellipse(0,-7,9,5,0,0,Math.PI*2);c.fill();c.beginPath();c.arc(8,-12,5,0,Math.PI*2);c.fill();c.beginPath();c.moveTo(4,-14);c.lineTo(4,-21);c.lineTo(9,-16);c.lineTo(13,-20);c.lineTo(13,-12);c.fill();c.strokeStyle='#282d30';c.lineWidth=2;c.beginPath();c.moveTo(-8,-7);c.quadraticCurveTo(-22,-10,-17,-21);for(let i=0;i<3;i++){c.moveTo(i*5-5,-5);c.lineTo(i*5-5+(moving?Math.sin(t*12+i)*3:0),0)}c.stroke();c.restore()}
-function tree(x,y,height,seed,color,detail){ctx.save();ctx.translate(x,y);ctx.strokeStyle=color;ctx.fillStyle=color;const bend=(rnd(seed)-.5)*100;path([[-height*.085,0],[-height*.045,-height*.4],[bend-12,-height],[bend+14,-height],[height*.04,-height*.42],[height*.1,0]],color);for(let j=0;j<7;j++){const yy=-height*(.28+j*.105),dir=j%2?1:-1,len=height*(.22+rnd(seed+j)*.2);ctx.lineWidth=Math.max(2,height*.017*(1-j*.08));ctx.beginPath();ctx.moveTo(bend*.4,yy);ctx.quadraticCurveTo(dir*len*.45,yy-15,dir*len,yy-height*.17);ctx.stroke();if(detail){ctx.strokeStyle='#d5d9d8';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(dir*len*.2,yy-8);ctx.quadraticCurveTo(dir*len*.55,yy-19,dir*len*.9,yy-height*.16);ctx.stroke();ctx.strokeStyle=color}for(let k=0;k<(detail?50:12);k++){const f=rnd(seed+j*43+k);const bx=dir*len*f,by=yy-height*.17*f+(rnd(k+seed*2)-.5)*height*.13;ellipse(bx,by,2+rnd(k)*5,2+rnd(k+1)*3,k%5===0&&detail?'#c7cdcd':color)}}ctx.restore()}
-function snow(t,strength){ctx.save();for(let i=0;i<190;i++){const depth=.3+rnd(i+30),x=((rnd(i)*W+t*(90+depth*180)*strength)%(W+150))-75,y=((rnd(i+12)*H+t*(26+depth*25))%(H+40))-20;ctx.globalAlpha=.15+depth*.3;ctx.strokeStyle='#fff';ctx.lineWidth=depth*1.5;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+7*depth*strength,y+3*depth);ctx.stroke()}ctx.restore()}
-function winter(t){let g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#c3c8c7');g.addColorStop(.6,'#e0e2db');g.addColorStop(1,'#616a6e');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);for(let k=0;k<4;k++){const side=k%2,base=side?W:-W*.1;ctx.beginPath();ctx.moveTo(base,H*.77);for(let i=0;i<30;i++){let x=base+(side?-1:1)*i*W*.025;ctx.lineTo(x,H*(.37+k*.08)+Math.sin(i*.18+k)*H*.15+rnd(i+k)*15)}ctx.lineTo(side?0:W,H);ctx.lineTo(base,H);ctx.fillStyle=['#a9b0b0','#b3baba','#9aa3a5','#929b9f'][k];ctx.fill()}let glow=ctx.createRadialGradient(W*.5,H*.4,0,W*.5,H*.4,W*.6);glow.addColorStop(0,'#e8e8dfb0');glow.addColorStop(1,'#dfe1db00');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);path([[0,H*.74],[W,H*.72],[W,H],[0,H]],'#394247');for(let i=0;i<1900;i++){let x=rnd(i)*W,y=H*(.73+rnd(i+34)*.28);ctx.fillStyle=i%3?'#d6dbd7':'#69757b';ctx.fillRect(x,y,2+rnd(i+9)*12,1+rnd(i+3)*2)}person(ctx,W*.25,H*.745,.65,t,false);kitty(ctx,W*.25-34,H*.746,.7,t,false);snow(t,1.8)}
-function forest(t){const scale=H/800;const view=W/scale;ctx.save();ctx.scale(scale,scale);let g=ctx.createLinearGradient(0,0,0,800);g.addColorStop(0,'#a8b2b5');g.addColorStop(.6,'#d7dedb');g.addColorStop(1,'#404e56');ctx.fillStyle=g;ctx.fillRect(0,0,view,800);for(let layer=0;layer<3;layer++){let factor=.12+layer*.18;for(let i=-3;i<30;i++){let x=i*155-cameraX*factor%(155*30);if(x>view+350||x<-350)continue;tree(x,650,650+rnd(i+layer*7)*300,i+layer*21,['#929fa2','#718187','#52636b'][layer],false)}}ctx.save();ctx.globalAlpha=.1;for(let i=0;i<6;i++)path([[view*.6+i*130,-10],[view*.6+i*130+35,-10],[view*.05+i*160,640],[view*.05+i*160-110,640]],'#fff');ctx.restore();ctx.translate(-cameraX,0);
-// A still stream joins each island. The surface reflects pale winter light.
-ctx.fillStyle='#7f959e';ctx.fillRect(cameraX,638,view,162);for(let i=0;i<65;i++){ctx.fillStyle=i%3?'#d6dfda40':'#283e4a40';ctx.fillRect(cameraX+rnd(i)*view+Math.sin(t+i)*10,645+rnd(i+12)*155,30+rnd(i+50)*180,1)}
-for(const [x,width,y]of platforms){path([[x,y+7],[x+width*.13,y-4],[x+width*.5,y-7],[x+width*.8,y-3],[x+width,y+8],[x+width+24,800],[x-30,800]],'#26363e');ctx.strokeStyle='#e4e8df';ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(x,y+1);ctx.bezierCurveTo(x+width*.3,y-12,x+width*.7,y-11,x+width,y+3);ctx.stroke();for(let i=0;i<60;i++){const bx=x+rnd(i+x)*width,by=y+22+rnd(i+width)*100;ellipse(bx,by,2+rnd(i)*10,1+rnd(i+8)*3,i%3?'#7d8d8f':'#d0d9d3')}}
-for(let i=0;i<25;i++){let x=i*239+50;if(x<cameraX-250||x>cameraX+view+300)continue;tree(x,626,500+rnd(i+83)*330,i+600,'#29383f',true)}
-// The hollow tree at the end holds the passage to another season.
-tree(5100,625,780,888,'#1e2d33',true);ellipse(5100,546,92,112,'#101d23');let portal=ctx.createRadialGradient(5100,560,4,5100,560,100);portal.addColorStop(0,collected.size===10?'#fff6ce':'#c9ddd23d');portal.addColorStop(1,'#d7e9de00');ctx.fillStyle=portal;ctx.fillRect(4990,440,220,210);ctx.strokeStyle=collected.size===10?'#fff5cd':'#8da1a0';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(5100,555,53,72,0,0,Math.PI*2);ctx.stroke();
-for(let i=0;i<embers.length;i++){if(collected.has(i))continue;let {x,y}=embers[i];y+=Math.sin(t*2+i)*7;let glow=ctx.createRadialGradient(x,y,0,x,y,31);glow.addColorStop(0,'#ffffeef0');glow.addColorStop(.2,'#ffffee80');glow.addColorStop(1,'#fff0');ctx.fillStyle=glow;ctx.fillRect(x-32,y-32,64,64);ctx.save();ctx.translate(x,y);ctx.rotate(Math.sin(t+i)*.2);path([[0,-10],[3,-3],[9,-7],[5,2],[0,7],[-5,2],[-9,-7],[-3,-3]],'#ffffef');ctx.restore()}
-person(ctx,hero.x,hero.y,1,t,Math.abs(moveDirection())>0,hero.face);kitty(ctx,cat.x,cat.y,.85,t,Math.abs(hero.x-cat.x)>50);
-ctx.restore();ctx.save();ctx.globalAlpha=.7;for(let i=0;i<7;i++){let x=i*W/5-(cameraX*.7)%(W/5);tree(x,H+85,H*.25,i+989,'#1b2022',true)}ctx.restore();snow(t,.75);const vignette=ctx.createRadialGradient(W*.5,H*.45,H*.1,W*.5,H*.45,W*.7);vignette.addColorStop(0,'#10131500');vignette.addColorStop(1,'#10131580');ctx.fillStyle=vignette;ctx.fillRect(0,0,W,H)}
-function moveDirection(){return (keys.has('ArrowRight')||keys.has('KeyD')?1:0)-(keys.has('ArrowLeft')||keys.has('KeyA')?1:0)||handDir}
-function jump(){if(state==='playing'&&hero.ground){hero.vy=-620;hero.ground=false;tone(260,.1,.025)}}
-function update(dt){if(state!=='playing'){hero.y=620;cat.y=620;return}const dir=moveDirection();if(dir)hero.face=dir;const prev=hero.y;hero.x=Math.max(20,Math.min(WORLD-50,hero.x+dir*235*dt));hero.vy+=1350*dt;hero.y+=hero.vy*dt;hero.ground=false;for(const[x,w,y]of platforms){if(hero.x>=x&&hero.x<=x+w&&prev<=y+1&&hero.y>=y&&hero.vy>=0){hero.y=y;hero.vy=0;hero.ground=true;break}}if(hero.y>900){const safe=platforms.filter(p=>p[0]+p[1]<hero.x).at(-1)||platforms[0];hero.x=Math.max(60,safe[0]+safe[1]-65);hero.y=safe[2];hero.vy=0;$('#status').textContent='风会带你回到岸边。试着在边缘向上跳跃。'}cat.x+=(hero.x-55-cat.x)*Math.min(1,dt*4);cat.y+=(hero.y-cat.y)*Math.min(1,dt*7);const visible=W/(H/800);cameraX+=(Math.max(0,Math.min(WORLD-visible,hero.x-visible*.33))-cameraX)*Math.min(1,dt*4);for(let i=0;i<embers.length;i++){const e=embers[i];if(!collected.has(i)&&Math.hypot(hero.x-e.x,hero.y-35-e.y)<54){collected.add(i);$('#count').textContent=String(collected.size).padStart(2,'0');tone(450+collected.size*45,.6,.04);$('#status').textContent=collected.size===10?'十枚余烬已点亮。走进古树中的光门。':'余烬 '+collected.size+' / 10 · 让微光为你引路'}}$('#chapter').textContent=hero.x<1900?'01 — THE SILENT WOODS':hero.x<3900?'02 — ACROSS THE WATER':'03 — THE HOLLOW TREE';if(hero.x>5020){if(collected.size===10)show('ending');else $('#status').textContent='光门还在等待：收集全部十枚余烬（可以向左返回）。'}}
-function frame(now){const dt=Math.min((now-last)/1000||0,.04);last=now;elapsed+=dt;ctx.clearRect(0,0,W,H);if(state==='loading'){progress=loadingComplete?1:Math.min(.96,progress+dt*.21);const c=$('#walkers'),p=c.getContext('2d');p.clearRect(0,0,160,90);person(p,102,89,1,elapsed,true);kitty(p,58,89,1,elapsed,true);$('.load-track i').style.width=progress*100+'%';c.style.left=progress*100+'%';$('#percent').textContent=Math.round(progress*100)+'%';ctx.fillStyle='#060707';ctx.fillRect(0,0,W,H)}else if(state==='story')winter(elapsed);else{update(dt);forest(elapsed)}requestAnimationFrame(frame)}requestAnimationFrame(frame);
-Promise.all([document.fonts.ready,new Promise(r=>setTimeout(r,4500))]).then(()=>{loadingComplete=true;progress=1;$('#percent').textContent='100%';$('.load-track i').style.width='100%';$('#walkers').style.left='100%';setTimeout(()=>show('story'),650)});
-$('#begin').onclick=()=>show('tutorial');$('#play').onclick=()=>show('playing');$('#restart').onclick=()=>{collected.clear();$('#count').textContent='00';show('playing')};$('#help').onclick=()=>$('#help-dialog').showModal();$('#close-help').onclick=()=>$('#help-dialog').close();$('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('#game').requestFullscreen()}catch{$('#status').textContent='此浏览器暂不支持全屏'}};
-addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code))e.preventDefault();keys.add(e.code);if(['ArrowUp','KeyW','Space'].includes(e.code)&&!e.repeat)jump();if(e.code==='Enter'&&state==='story')show('tutorial');else if(e.code==='Enter'&&state==='tutorial')show('playing')});addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>{keys.clear();handDir=0});document.addEventListener('visibilitychange',()=>{if(document.hidden){keys.clear();handDir=0;previousPalm=null}});
-for(const b of document.querySelectorAll('[data-key]')){b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);keys.add(b.dataset.key);if(b.dataset.key==='Space')jump()};b.onpointerup=b.onpointercancel=b.onlostpointercapture=()=>keys.delete(b.dataset.key)}
-function tone(freq,duration,volume){if(muted||!audio)return;const osc=audio.createOscillator(),gain=audio.createGain();osc.frequency.value=freq;osc.type='sine';gain.gain.setValueAtTime(volume,audio.currentTime);gain.gain.exponentialRampToValueAtTime(.0001,audio.currentTime+duration);osc.connect(gain).connect(audio.destination);osc.start();osc.stop(audio.currentTime+duration)}
-$('#sound').onclick=async()=>{if(!audio){audio=new AudioContext();const buffer=audio.createBuffer(1,audio.sampleRate*3,audio.sampleRate),data=buffer.getChannelData(0);let smooth=0;for(let i=0;i<data.length;i++){smooth=(smooth+Math.random()*.04-.02)/1.015;data[i]=smooth}const source=audio.createBufferSource();source.buffer=buffer;source.loop=true;const filter=audio.createBiquadFilter();filter.frequency.value=500;windGain=audio.createGain();source.connect(filter).connect(windGain).connect(audio.destination);source.start()}await audio.resume();muted=!muted;windGain.gain.value=muted?0:.32;$('#sound').textContent=muted?'SOUND OFF':'SOUND ON'};
-function stopCamera(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('#video').srcObject=null;$('#camera-panel').hidden=true;handDir=0;handJump=false;previousPalm=null;$('#camera').textContent='开启手势摄像头 ↗'}
-$('#close-camera').onclick=stopCamera;
-$('#camera').onclick=async()=>{if(cameraBusy)return;if(stream){stopCamera();return}cameraBusy=true;$('#camera').textContent='正在加载手势模型…';try{const{HandLandmarker,FilesetResolver}=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs');if(!landmarker){const files=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm');landmarker=await HandLandmarker.createFromOptions(files,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'},runningMode:'VIDEO',numHands:1})}stream=await navigator.mediaDevices.getUserMedia({video:{width:480,height:360,facingMode:'user'},audio:false});$('#video').srcObject=stream;await $('#video').play();videoFrame=-1;$('#camera-panel').hidden=false;$('#camera').textContent='手势已开启 ↗';if(!recognizing){recognizing=true;requestAnimationFrame(detect)}}catch(err){stopCamera();$('#status').textContent=err.name==='NotAllowedError'?'摄像头权限未开启，仍可使用键盘或触屏。':'摄像头或手势模型未能加载，可重试或使用键盘。';console.warn('Hand tracking unavailable:',err.name)}finally{cameraBusy=false}};
-function detect(now){if(!stream){recognizing=false;return}try{const video=$('#video');if(video.currentTime!==videoFrame&&now-handTime>65){handTime=now;videoFrame=video.currentTime;const result=landmarker.detectForVideo(video,now),p=result.landmarks[0];if(p){const extended=[8,12,16,20].map((tip)=>Math.hypot(p[tip].x-p[0].x,p[tip].y-p[0].y)>Math.hypot(p[tip-2].x-p[0].x,p[tip-2].y-p[0].y)*1.18);const open=extended.every(Boolean),point=extended[0]&&!extended[1]&&!extended[2]&&!extended[3]&&p[8].y<p[6].y;const x=1-(p[0].x+p[9].x)/2;handDir=open?(x<.38?-1:x>.62?1:0):0;if(point&&!handJump)jump();handJump=point;if(open&&previousPalm&&now-previousPalm.time<850&&x-previousPalm.x>.22){if(state==='story')show('tutorial');else if(state==='tutorial')show('playing');previousPalm=null}else if(open&&(!previousPalm||now-previousPalm.time>850))previousPalm={x,time:now};if(!open)previousPalm=null;$('#gesture').textContent=point?'食指向上 · 跳跃':open?(handDir<0?'← 向左行走':handDir>0?'向右行走 →':'中心区域 · 停止'):'请张开手掌'}else{handDir=0;handJump=false;previousPalm=null;$('#gesture').textContent='没有检测到手掌'}}}catch(err){stopCamera();$('#status').textContent='手势识别中断，请重新开启摄像头。';recognizing=false;return}requestAnimationFrame(detect)}
-// Camera access is also offered during the prologue, so its swipe can advance the story.
-const cameraObserver=new MutationObserver(()=>{if(state==='story'){$('#hud').hidden=false;$('#hud>div').style.visibility='hidden';$('#chapter').style.visibility='hidden'}else{$('#hud>div').style.visibility='';$('#chapter').style.visibility=''}});cameraObserver.observe($('#story'),{attributes:true,attributeFilter:['hidden']});
-addEventListener('pagehide',stopCamera);
+/* The Fifth Season — classic script, usable through file:// and localhost. */
+(function () {
+  'use strict';
 
+  const $ = (selector) => document.querySelector(selector);
+  const game = $('#game');
+  const canvas = $('#world');
+  const ctx = canvas.getContext('2d');
+  const { level, step, jump } = globalThis.FifthSeasonLevel;
+  const hero = { x: 450, y: level.ground, vy: 0, grounded: true, face: 1 };
+  const keys = new Set();
+  const collected = new Set();
+  const backgrounds = {};
+  let scene = 'loading';
+  let sceneAge = 0;
+  let time = 0;
+  let previousFrame = 0;
+  let accumulator = 0;
+  let cameraX = 0;
+  let width = 0;
+  let height = 0;
+  let assetsReady = false;
+  let progress = 0;
+  let fade = 0;
+  let handDirection = 0;
+  let handWasPointing = false;
+  let stream = null;
+  let landmarker = null;
+  let cameraBusy = false;
+  let cameraGeneration = 0;
+  let lastHandFrame = -1;
+  let lastDetection = 0;
+  let swipeOrigin = null;
+  let lastAdvance = 0;
+
+  function resize() {
+    width = Math.max(1, innerWidth);
+    height = Math.max(1, innerHeight);
+    const ratio = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
+  resize();
+  addEventListener('resize', resize);
+
+  function setScene(next) {
+    scene = next;
+    sceneAge = 0;
+    fade = next === 'loading' ? 0 : 1;
+    keys.clear();
+    handDirection = 0;
+    swipeOrigin = null;
+    game.dataset.scene = next;
+    for (const name of ['loading', 'title', 'story', 'tutorial', 'mission', 'ending']) {
+      $('#' + name).hidden = name !== next;
+    }
+    $('#next').hidden = !['story', 'tutorial', 'mission'].includes(next);
+    $('#camera').hidden = ['loading', 'title', 'ending'].includes(next);
+    $('#count').hidden = next !== 'playing';
+    $('#touch').hidden = next !== 'playing';
+    if (next === 'playing') {
+      Object.assign(hero, { x: 450, y: level.ground, vy: 0, grounded: true, face: 1 });
+      cameraX = 0;
+      collected.clear();
+      $('#count').textContent = '0 / 10';
+    }
+    if (next === 'ending') stopCamera();
+  }
+
+  function advance() {
+    if (sceneAge < .65) return;
+    if (scene === 'title') setScene('story');
+    else if (scene === 'story') setScene('tutorial');
+    else if (scene === 'tutorial') setScene('mission');
+    else if (scene === 'mission') setScene('playing');
+  }
+  $('#next').onclick = advance;
+  $('#restart').onclick = () => setScene('playing');
+  canvas.addEventListener('click', advance);
+
+  function shape(c, points, fill) {
+    c.beginPath();
+    points.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+    c.closePath();
+    c.fillStyle = fill;
+    c.fill();
+  }
+
+  function drawTraveler(c, x, y, scale, moving, facing, light = false) {
+    c.save();
+    c.translate(x, y);
+    c.scale(scale * facing, scale);
+    const swing = moving ? Math.sin(time * 10) : 0;
+    const bob = moving ? Math.abs(Math.sin(time * 10)) * 1.3 : 0;
+    c.translate(0, -bob);
+    const dark = light ? '#b9b9b9' : '#25252a';
+    c.strokeStyle = dark;
+    c.lineWidth = 2.5;
+    c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(-4, -16); c.lineTo(-6 - swing * 5, -2); c.lineTo(-2 - swing * 5, 0);
+    c.moveTo(3, -16); c.lineTo(7 + swing * 5, -2); c.lineTo(11 + swing * 5, -1);
+    c.stroke();
+    // Coat and scarf follow the same silhouette as the reference traveler.
+    c.fillStyle = dark;
+    c.beginPath();
+    c.moveTo(0, -62);
+    c.bezierCurveTo(-8, -52, -12, -29, -22 - swing * 1.5, -18);
+    c.quadraticCurveTo(-9, -9, 13, -16);
+    c.quadraticCurveTo(8, -37, 4, -60);
+    c.fill();
+    c.strokeStyle = light ? '#e2e2e2' : '#626269';
+    c.lineWidth = .7;
+    c.beginPath(); c.moveTo(0, -53); c.quadraticCurveTo(-4, -29, -13, -18); c.stroke();
+    c.fillStyle = '#efefeb';
+    c.beginPath();
+    c.moveTo(-1, -61);
+    c.bezierCurveTo(-14, -58, -23, -55, -40, -64 + Math.sin(time * 3) * 3);
+    c.bezierCurveTo(-30, -52, -13, -48, 3, -57);
+    c.fill();
+    // White hair, a small face, and uneven hair ends rather than a circle.
+    c.fillStyle = '#dddeda';
+    c.beginPath(); c.ellipse(3, -66, 5.5, 7, .1, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#f0f0ec';
+    c.beginPath();
+    c.moveTo(-7, -65); c.bezierCurveTo(-10, -77, 8, -83, 11, -70);
+    c.lineTo(15, -66); c.lineTo(8, -67); c.lineTo(5, -63);
+    c.lineTo(3, -69); c.lineTo(-1, -63); c.lineTo(-2, -68); c.lineTo(-7, -62);
+    c.fill();
+    c.restore();
+  }
+
+  function drawCat(c, x, y) {
+    c.save(); c.translate(x, y);
+    c.fillStyle = '#b9b9b9';
+    c.beginPath(); c.ellipse(-1, -8, 10, 5, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(9, -14, 5, 0, Math.PI * 2); c.fill();
+    shape(c, [[5, -16], [5, -23], [10, -18], [14, -22], [14, -14]], '#b9b9b9');
+    c.strokeStyle = '#b9b9b9'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(-10, -9); c.bezierCurveTo(-24, -10, -22, -24, -17, -23);
+    for (let i = 0; i < 4; i++) {
+      c.moveTo(i * 4 - 7, -6); c.lineTo(i * 4 - 7 + Math.sin(time * 11 + i) * 3, -1);
+    }
+    c.stroke(); c.restore();
+  }
+
+  function drawLoading(dt) {
+    const target = assetsReady ? 1 : .9;
+    progress = Math.min(target, progress + dt * (assetsReady ? .6 : .27));
+    $('#load-fill').style.width = `${progress * 100}%`;
+    $('#walkers').style.left = `${Math.max(.045, progress) * 100}%`;
+    const c = $('#walkers').getContext('2d');
+    c.clearRect(0, 0, 240, 130);
+    drawTraveler(c, 206, 128, 1.25, true, 1, true);
+    drawCat(c, 133, 128);
+    if (progress >= 1 && sceneAge > 2.5) setScene('title');
+  }
+
+  const random = (seed) => {
+    const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+    return value - Math.floor(value);
+  };
+
+  function drawSnow(strength) {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) return;
+    ctx.save();
+    for (let i = 0; i < (strength > 1 ? 150 : 55); i++) {
+      const depth = .3 + random(i + 7);
+      const gust = 1 + Math.sin(time * .4) * .25;
+      const x = ((random(i) * width + time * (50 + depth * 130) * strength * gust) % (width + 80)) - 40;
+      const y = ((random(i + 50) * height + time * (14 + depth * 26)) % (height + 40)) - 20;
+      ctx.globalAlpha = .12 + depth * .24;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = depth * 1.3;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + depth * 9 * strength, y + depth * 4); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawWinter() {
+    const image = backgrounds.winter;
+    if (image) ctx.drawImage(image, 0, 0, width, height);
+    drawSnow(1.6);
+  }
+
+  function drawEmber(x, y, seed) {
+    y += Math.sin(time * 2 + seed) * 3;
+    ctx.save();
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 23);
+    glow.addColorStop(0, '#fffffbc0');
+    glow.addColorStop(.25, '#fffffb60');
+    glow.addColorStop(1, '#fffffb00');
+    ctx.fillStyle = glow; ctx.fillRect(x - 23, y - 23, 46, 46);
+    ctx.translate(x, y); ctx.rotate(Math.sin(time + seed) * .15);
+    ctx.fillStyle = '#fffffc';
+    ctx.beginPath();
+    ctx.moveTo(0, 3);
+    ctx.bezierCurveTo(-4, 0, -11, -9, -8, -10);
+    ctx.quadraticCurveTo(-3, -9, 0, -4);
+    ctx.quadraticCurveTo(4, -13, 9, -11);
+    ctx.quadraticCurveTo(9, -2, 0, 3);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawForest() {
+    const scale = height / 800;
+    const view = width / scale;
+    const tile = Math.max(1215, view);
+    ctx.save(); ctx.scale(scale, scale);
+    const image = backgrounds.forest;
+    // Mirrored adjoining plates keep the bank continuous and prevent hard seams.
+    const offset = scene === 'playing' ? cameraX : 0;
+    if (image) {
+      const start = Math.floor(offset / tile);
+      for (let i = start; i <= start + 2; i++) {
+        const x = i * tile - offset;
+        ctx.save();
+        if (i % 2) { ctx.translate(x + tile, 0); ctx.scale(-1, 1); }
+        else ctx.translate(x, 0);
+        ctx.drawImage(image, 0, 0, tile + 1, 800);
+        ctx.restore();
+      }
+    }
+    ctx.translate(-cameraX, 0);
+    if (scene === 'tutorial' || scene === 'mission') {
+      const x = Math.min(view * .395, 480);
+      drawTraveler(ctx, x, 620, 1.15, false, 1);
+      [80, 145, 205].forEach((dx, i) => drawEmber(x + dx, 565 - i * 13, i));
+    } else {
+      level.embers.forEach((ember, index) => {
+        if (!collected.has(index)) drawEmber(ember.x, ember.y, index);
+      });
+      drawTraveler(ctx, hero.x, hero.y, 1.15, Math.abs(direction()) > 0, hero.face);
+    }
+    ctx.restore();
+    drawSnow(.5);
+  }
+
+  function direction() {
+    const keyboard = (keys.has('ArrowRight') || keys.has('KeyD') ? 1 : 0) -
+      (keys.has('ArrowLeft') || keys.has('KeyA') ? 1 : 0);
+    return keyboard || handDirection;
+  }
+
+  function update(dt) {
+    if (scene !== 'playing') return;
+    const move = direction();
+    if (move) hero.face = move;
+    step(hero, move, dt);
+    level.embers.forEach((ember, index) => {
+      if (!collected.has(index) && Math.hypot(hero.x - ember.x, hero.y - 42 - ember.y) < 40) {
+        collected.add(index);
+        $('#count').textContent = `${collected.size} / 10`;
+      }
+    });
+    const visible = width / (height / 800);
+    const target = Math.max(0, Math.min(level.width - visible, hero.x - visible * .395));
+    cameraX += (target - cameraX) * Math.min(1, dt * 5);
+    if (collected.size === 10 && hero.x > 4900) setScene('ending');
+    // These DOM values allow QA to read actual game state without changing it.
+    game.dataset.playerX = hero.x.toFixed(1);
+    game.dataset.playerY = hero.y.toFixed(1);
+    game.dataset.collected = String(collected.size);
+  }
+
+  function render(now) {
+    const dt = Math.min((now - previousFrame) / 1000 || 0, .06);
+    previousFrame = now;
+    time += dt;
+    sceneAge += dt;
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
+    if (scene === 'loading') drawLoading(dt);
+    else if (scene === 'title') { if (sceneAge > 2) setScene('story'); }
+    else if (scene === 'story') drawWinter();
+    else if (scene !== 'ending') {
+      accumulator += dt;
+      // Fixed physics steps keep jumping consistent at different frame rates.
+      while (accumulator >= 1 / 120) { update(1 / 120); accumulator -= 1 / 120; }
+      if (scene !== 'ending') drawForest();
+    }
+    if (fade > 0) {
+      fade = Math.max(0, fade - dt * .9);
+      ctx.fillStyle = `rgba(0,0,0,${fade})`;
+      ctx.fillRect(0, 0, width, height);
+    }
+    requestAnimationFrame(render);
+  }
+
+  function clearInput() { keys.clear(); handDirection = 0; swipeOrigin = null; }
+  addEventListener('keydown', (event) => {
+    if (event.target instanceof HTMLButtonElement && event.code === 'Space') return;
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(event.code)) event.preventDefault();
+    keys.add(event.code);
+    if (scene === 'playing' && !event.repeat && ['ArrowUp', 'KeyW', 'Space'].includes(event.code)) jump(hero);
+    else if (!event.repeat && ['Enter', 'ArrowRight', 'Space'].includes(event.code)) advance();
+  });
+  addEventListener('keyup', (event) => keys.delete(event.code));
+  addEventListener('blur', clearInput);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) clearInput(); });
+  for (const button of document.querySelectorAll('[data-key]')) {
+    button.onpointerdown = (event) => {
+      event.preventDefault(); button.setPointerCapture(event.pointerId);
+      keys.add(button.dataset.key);
+      if (button.dataset.key === 'Space') jump(hero);
+    };
+    button.onpointerup = button.onpointercancel = button.onlostpointercapture = () => keys.delete(button.dataset.key);
+  }
+  let swipeStart = null;
+  canvas.addEventListener('pointerdown', (event) => { swipeStart = { x: event.clientX, y: event.clientY }; });
+  canvas.addEventListener('pointerup', (event) => {
+    if (swipeStart && event.clientX - swipeStart.x > 80 && Math.abs(event.clientY - swipeStart.y) < 100) advance();
+    swipeStart = null;
+  });
+
+  function stopCamera() {
+    cameraGeneration++;
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    stream = null;
+    $('#video').srcObject = null;
+    $('#camera-panel').hidden = true;
+    $('#camera').title = '开启手势摄像头';
+    handDirection = 0;
+    handWasPointing = false;
+    swipeOrigin = null;
+  }
+  $('#close-camera').onclick = stopCamera;
+
+  $('#camera').onclick = async () => {
+    if (cameraBusy) return;
+    if (stream) { stopCamera(); return; }
+    cameraBusy = true;
+    const generation = ++cameraGeneration;
+    $('#camera').setAttribute('aria-busy', 'true');
+    $('#camera').dataset.error = 'false';
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera unavailable');
+      // The game itself does not depend on this optional network import.
+      const modelPromise = (async () => {
+        if (landmarker) return landmarker;
+        const { HandLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs');
+        const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm');
+        return HandLandmarker.createFromOptions(files, {
+          baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' },
+          runningMode: 'VIDEO', numHands: 1
+        });
+      })();
+      let timeout;
+      try {
+        landmarker = await Promise.race([modelPromise, new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('Model download timeout')), 25000);
+        })]);
+      } finally { clearTimeout(timeout); }
+      if (generation !== cameraGeneration) return;
+      const opened = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360, facingMode: 'user' }, audio: false });
+      if (generation !== cameraGeneration) { opened.getTracks().forEach(track => track.stop()); return; }
+      stream = opened;
+      $('#video').srcObject = stream;
+      await $('#video').play();
+      $('#camera-panel').hidden = false;
+      $('#camera').title = '关闭手势摄像头';
+      lastHandFrame = -1;
+      requestAnimationFrame(detectHands);
+    } catch (error) {
+      stopCamera();
+      const message = error.name === 'NotAllowedError'
+        ? '摄像头权限未开启。可以用左右方向键行走、空格跳跃。'
+        : '手势模型或摄像头未能开启。可重试，也可用左右方向键行走、空格跳跃。';
+      $('#status').textContent = message;
+      $('#camera').title = message;
+      $('#camera').dataset.error = 'true';
+      console.warn('Optional hand control:', error.name, error.message);
+    } finally {
+      cameraBusy = false;
+      $('#camera').setAttribute('aria-busy', 'false');
+    }
+  };
+
+  function detectHands(now) {
+    if (!stream) return;
+    const video = $('#video');
+    try {
+      if (video.currentTime !== lastHandFrame && now - lastDetection > 65) {
+        lastHandFrame = video.currentTime;
+        lastDetection = now;
+        const p = landmarker.detectForVideo(video, now).landmarks[0];
+        if (!p || document.hidden) {
+          handDirection = 0; handWasPointing = false; swipeOrigin = null;
+          $('#hand-indicator').textContent = '·';
+        } else {
+          const extended = [8, 12, 16, 20].map(tip =>
+            Math.hypot(p[tip].x - p[0].x, p[tip].y - p[0].y) >
+            Math.hypot(p[tip - 2].x - p[0].x, p[tip - 2].y - p[0].y) * 1.18);
+          const open = extended.every(Boolean);
+          const point = extended[0] && !extended[1] && !extended[2] && !extended[3] && p[8].y < p[6].y;
+          const x = 1 - (p[0].x + p[9].x) / 2;
+          handDirection = open ? (x < .38 ? -1 : x > .62 ? 1 : 0) : 0;
+          if (point && !handWasPointing && scene === 'playing') jump(hero);
+          handWasPointing = point;
+          $('#hand-indicator').textContent = point ? '↑' : handDirection < 0 ? '←' : handDirection > 0 ? '→' : '·';
+          if (open && swipeOrigin && now - swipeOrigin.time < 900 && x - swipeOrigin.x > .2 && now - lastAdvance > 1300) {
+            advance(); lastAdvance = now; swipeOrigin = null;
+          } else if (open && (!swipeOrigin || now - swipeOrigin.time > 900)) {
+            swipeOrigin = { x, time: now };
+          }
+          if (!open) swipeOrigin = null;
+        }
+      }
+    } catch (error) {
+      stopCamera(); $('#camera').dataset.error = 'true';
+      return;
+    }
+    requestAnimationFrame(detectHands);
+  }
+  addEventListener('pagehide', stopCamera);
+
+  function loadImage(name) {
+    return new Promise(resolve => {
+      const image = new Image();
+      image.onload = () => { backgrounds[name] = image; resolve(); };
+      image.onerror = () => { console.error('Missing background:', name); resolve(); };
+      image.src = `assets/${name}.png`;
+    });
+  }
+  const fontReady = document.fonts.load('32px Palmetto').then(fonts => {
+    game.dataset.fontLoaded = String(fonts.length > 0);
+  }).catch(() => { game.dataset.fontLoaded = 'false'; });
+  Promise.all([loadImage('forest'), loadImage('winter'), fontReady]).then(() => { assetsReady = true; });
+  // Never leave the loading bar permanently blocked by a font or asset request.
+  setTimeout(() => { assetsReady = true; }, 6000);
+  requestAnimationFrame(render);
+})();

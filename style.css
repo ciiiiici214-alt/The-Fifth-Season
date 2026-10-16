@@ -1,2 +1,60 @@
-@font-face{font-family:Palmetto;src:url('./PALMETTOV0.4TEST-REGULAR.OTF')}*{box-sizing:border-box}body{margin:0;background:#111416;color:#eee;font-family:Arial,'Microsoft YaHei',sans-serif;overflow:hidden}button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}button:hover{color:white;text-shadow:0 0 12px #fff}button:focus-visible,a:focus-visible{outline:1px solid white;outline-offset:6px}[hidden]{display:none!important}#game{height:100dvh;min-height:460px;position:relative;overflow:hidden}#world{width:100%;height:100%;display:block}header{position:absolute;top:34px;left:4%;right:4%;display:flex;justify-content:space-between;align-items:center;z-index:5}header a{font-family:Georgia,serif;text-decoration:none;color:inherit;letter-spacing:3px;font-size:15px}header a span{display:block;font:8px Arial;letter-spacing:2.7px;margin-top:9px;opacity:.5}nav{display:flex;gap:24px;align-items:center}nav button{font-size:10px;letter-spacing:1.5px}nav button:last-child{font-size:23px}footer{position:absolute;bottom:25px;left:4%;right:4%;display:flex;justify-content:space-between;font-size:9px;letter-spacing:2px;color:#ced0cf;z-index:3}footer i{font-size:18px;margin-left:15px}#status{letter-spacing:2px;font-size:10px}section{position:absolute;z-index:2}#loader{inset:0;background:#060707;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:4}.load-title{font:clamp(32px,5vw,70px) Georgia;letter-spacing:4px;margin-bottom:110px}.load-track{position:relative;width:60%;height:1px;background:#363839}.load-track i{position:absolute;left:0;top:0;height:1px;background:#eee;width:0}#walkers{position:absolute;bottom:0;width:100px;height:57px;left:0;transform:translateX(-68px)}#loader p{display:flex;justify-content:space-between;width:60%;font:9px Arial;letter-spacing:3px;margin-top:20px;color:#95999a}#story{top:32%;width:100%;text-align:center;color:#25282a}h1{font:clamp(36px,4.3vw,67px)/1.2 Palmetto,Georgia,serif;font-weight:normal;margin:22px 0}.eyebrow{font:9px Arial;letter-spacing:4px;opacity:.7}.story-line{font:clamp(19px,2vw,29px) Palmetto,Georgia;opacity:0;animation:appear 2s 1s forwards}.story-line.chinese{font:11px Arial;letter-spacing:4px;animation-delay:2.6s;margin-top:26px}.continue{display:block;font-size:11px;letter-spacing:2px;margin:45px auto 0;line-height:2}.continue span{margin-left:35px;font-size:23px}.continue small{display:block;font-size:9px;opacity:.55;letter-spacing:2px}#story .continue{opacity:0;animation:appear 2s 3.5s forwards}#tutorial{left:15%;top:24%;max-width:600px;text-shadow:0 2px 20px #1a2022}#tutorial h1{font-size:clamp(35px,4.5vw,68px)}.instructions{display:flex;gap:45px;font-size:11px;line-height:2.2;color:#e1e4e3}.instructions b{display:block;font-size:10px;letter-spacing:2px;margin-bottom:8px}#tutorial .continue{margin:20px 0}.keyboard-note{font-size:9px;letter-spacing:1px;opacity:.6}#hud{position:absolute;left:4%;right:4%;top:112px;display:flex;justify-content:space-between;align-items:center;z-index:3}#hud>div{font:26px Georgia;letter-spacing:4px}.ember-icon{margin-right:12px;text-shadow:0 0 10px white}.total{font-size:12px;opacity:.5}#chapter{font-size:9px;letter-spacing:3px;opacity:.6}#camera{font-size:10px;letter-spacing:1px;border:1px solid #ffffff40;padding:12px 17px;background:#10151855}#camera-panel{position:absolute;bottom:65px;right:4%;width:200px;background:#111b;z-index:6;border:1px solid #ffffff40}video{width:100%;display:block;transform:scaleX(-1);opacity:.65}.center-zone{position:absolute;top:0;bottom:28px;left:38%;width:24%;border-inline:1px dashed #fffa}#camera-panel p{font-size:9px;text-align:center;margin:8px}#close-camera{position:absolute;top:2px;right:4px}#ending{inset:0;text-align:center;display:flex;flex-direction:column;justify-content:center;background:#121719d9}#ending p{font-size:12px;letter-spacing:3px}#ending h1{font-size:70px}dialog{background:#1b2225;color:#eee;border:1px solid #697176;padding:35px;max-width:480px;line-height:2;font-size:13px}dialog::backdrop{background:#0009}dialog h2{font:32px Palmetto,Georgia}#close-help{float:right}#touch{position:absolute;bottom:65px;left:4%;right:4%;display:flex;gap:12px;pointer-events:none}#touch button{pointer-events:auto;width:48px;height:48px;border:1px solid #ffffff55;border-radius:50%;background:#18202466;font-size:22px;touch-action:none}#touch button:last-child{margin-left:auto}@keyframes appear{to{opacity:1}}@media(max-width:700px){header{top:22px}header a{font-size:10px}header a span{font-size:6px}nav{gap:12px}#tutorial{left:8%;top:24%}.instructions{gap:20px;font-size:10px}footer{font-size:7px}#status{max-width:48%;font-size:8px;letter-spacing:0}#chapter{display:none}#hud{top:88px}.load-title{letter-spacing:1px}#camera-panel{width:150px;bottom:125px}#ending h1{font-size:42px}}
-#world{filter:grayscale(1)}#story,#tutorial,#ending{animation:appear 1.4s both}@media(prefers-reduced-motion:reduce){.story-line,#story .continue{animation-delay:0s;animation-duration:.1s}}
+/* Palmetto is loaded from font.css, generated from the supplied OTF. */
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; }
+body, button { font-family: 'Palmetto', serif; font-weight: 400; }
+button { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 12px; }
+button:focus-visible { outline: 1px solid currentColor; outline-offset: 3px; }
+[hidden] { display: none !important; }
+#game { position: relative; width: 100%; height: 100dvh; overflow: hidden; color: #fff; }
+#world { display: block; width: 100%; height: 100%; }
+section { position: absolute; pointer-events: none; }
+h1, p { font-weight: 400; margin: 0; }
+#loading { inset: 0; background: #000; display: grid; place-items: center; }
+.load-track { width: 100%; height: 1px; background: #393939; position: relative; }
+#load-fill { height: 1px; width: 0; background: #bdbdbd; }
+#walkers { position: absolute; width: 120px; height: 65px; bottom: 0; left: 0; transform: translateX(-110px); }
+#title, #ending { inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+#title h1, #ending h1 { font-size: clamp(29px, 3.5vw, 56px); letter-spacing: .025em; }
+#title h1 { animation: fade-in 1.2s both; }
+#story { top: 33%; left: 5%; width: 90%; text-align: center; color: #151515; }
+#story h1 { font-size: clamp(24px, 2.5vw, 36px); animation: fade-in 1.6s both; }
+#story p { margin-top: 16px; font-size: clamp(23px, 2.5vw, 36px); animation: fade-in 1.8s 1.4s both; }
+#tutorial { left: 31%; top: 32%; width: 49%; text-shadow: 0 1px 8px #3334; }
+#tutorial h1 { font-size: clamp(25px, 3.25vw, 48px); line-height: 1.16; white-space: nowrap; }
+#tutorial p { margin-top: 30px; font-size: clamp(16px, 1.75vw, 25px); line-height: 1.65; }
+#mission { left: 6%; top: 36%; width: 88%; text-align: center; }
+#mission h1 { font-size: clamp(25px, 3.3vw, 47px); }
+#tutorial, #mission { animation: fade-in 1.3s both; }
+#next { position: absolute; right: 4%; bottom: 4%; font-family: serif; font-size: 30px; opacity: .65; transition: opacity .3s; }
+#next:hover, #camera:hover { opacity: 1; }
+#game[data-scene="story"] #next, #game[data-scene="story"] #camera { color: #303030; }
+#count { position: absolute; top: 5%; right: 5%; font-size: 24px; opacity: .8; text-shadow: 0 1px 8px #111; }
+#camera { position: absolute; right: 4%; bottom: 4%; width: 46px; height: 46px; opacity: .65; }
+#game[data-scene="story"] #camera, #game[data-scene="tutorial"] #camera, #game[data-scene="mission"] #camera { right: 9%; }
+#camera svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+#camera[aria-busy="true"] { animation: pulse 1s infinite alternate; }
+#camera[data-error="true"] { color: #ad6868; }
+#camera-panel { position: absolute; bottom: 12%; right: 4%; width: 160px; border: 1px solid #ffffff40; background: #111b; }
+video { width: 100%; display: block; transform: scaleX(-1); opacity: .7; }
+.center-zone { position: absolute; inset: 0 38%; border-inline: 1px dashed #fff6; pointer-events: none; }
+#close-camera { position: absolute; top: 0; right: 0; padding: 0 6px; font: 22px serif; }
+#hand-indicator { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font: 18px serif; }
+#ending { animation: fade-in 2s both; flex-direction: column; gap: 30px; }
+#restart { pointer-events: auto; font: 28px serif; opacity: .6; }
+#touch { display: none; position: absolute; bottom: 3%; left: 4%; right: 15%; gap: 16px; pointer-events: none; }
+#touch button { pointer-events: auto; touch-action: none; font: 27px serif; width: 44px; height: 44px; opacity: .65; }
+#touch button:last-child { margin-left: auto; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse { to { opacity: .25; } }
+@media (pointer: coarse) { #touch:not([hidden]) { display: flex; } }
+@media (max-aspect-ratio: 1/1) {
+  #tutorial { left: 9%; width: 82%; top: 28%; }
+  #tutorial h1 { font-size: 28px; white-space: normal; }
+  #tutorial p { font-size: 19px; margin-top: 20px; }
+  #tutorial br { display: none; }
+  #story { top: 34%; }
+  #story p { max-width: 90%; margin-inline: auto; }
+  #game[data-scene="story"] #camera, #game[data-scene="tutorial"] #camera, #game[data-scene="mission"] #camera { right: 17%; }
+}
+@media (prefers-reduced-motion: reduce) { section, #story h1, #story p { animation-duration: .1s !important; animation-delay: 0s !important; } }
