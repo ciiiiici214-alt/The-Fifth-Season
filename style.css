@@ -72,3 +72,17 @@ video { width: 100%; display: block; transform: scaleX(-1); opacity: .7; }
 .finger-light::after { content: ''; position: absolute; inset: -8px; border: 1px solid #fff7; border-radius: 50%; }
 #game[data-scene="portal"] #camera, #game[data-scene="menu"] #camera { right: 4%; color: white; }
 @media(max-aspect-ratio:1/1) { #menu { padding-top: 29vh; } #menu h1 { font-size: 8vw; } #menu nav { margin-top: 4vh; } }
+/* Softer, shorter loading line; no extra on-screen copy. */
+.load-track { width: min(48vw, 640px); min-width: 220px; background: #ffffff24; }
+#load-fill { background: #ddd7cf; box-shadow: 0 0 5px #f3dfc044; }
+#loading { transition: opacity .6s; }
+.finger-light { will-change: transform; mix-blend-mode: normal; }
+#menu button { will-change: transform; }
+#count { display: flex; flex-direction: column; align-items: flex-end; gap: 9px; }
+.leaf-total { font-size: 25px; }
+.leaf-slots { display: flex; gap: 5px; }
+.leaf-slots i { display: block; width: 7px; height: 11px; border: 1px solid #d8bb7c; border-radius: 80% 0 80% 0; background: #2f535b; opacity: .75; }
+.leaf-slots i.found { background: #f0cb81; box-shadow: 0 0 5px #f1c57877; opacity: 1; }
+#count.collected { animation: collect-pulse .65s ease-out; }
+@keyframes collect-pulse { 25% { filter: drop-shadow(0 0 7px #ecc27c); transform: scale(1.06); } }
+@media (max-width: 600px) { .load-track { width: 64vw; } }

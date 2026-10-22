@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hand worker smoke test</title>
+<pre id="result">Initializing official hand model…</pre>
+<script src="../hand-tracker.js"></script>
+<script>
+(async () => {
+  try {
+    const tracker = await FifthSeasonHandTracker.create(new URL('../', location.href).href);
+    if (!tracker.threaded) throw new Error('Expected an independent Worker');
+    const frame = document.createElement('canvas');
+    frame.width = 256; frame.height = 192;
+    frame.getContext('2d').fillRect(0, 0, 256, 192);
+    const hands = await tracker.detect(frame, performance.now());
+    if (!Array.isArray(hands) || hands.length !== 0) throw new Error('Unexpected blank-frame result');
+    document.querySelector('#result').textContent = 'PASS: local Worker model initialized and processed a frame without camera access.';
+  } catch (error) {
+    document.querySelector('#result').textContent = 'FAIL: ' + error.message;
+  }
+})();
+</script>

@@ -11,6 +11,10 @@
   const keys = new Set();
   const collected = new Set();
   const backgrounds = {};
+  const cached = {};
+  const particles = [];
+  const companion = { x: 395, y: level.ground };
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let scene = 'portal';
   let sceneAge = 0;
   let time = 0;
@@ -33,12 +37,22 @@
   let swipeOrigin = null;
   let lastAdvance = 0;
   const ring = new globalThis.FifthSeasonInput.ClockwiseRing();
-  const pinch = new globalThis.FifthSeasonInput.TwoHandPinch();
+  const pinch = new globalThis.FifthSeasonInput.PinchConfirm();
   const menuButtons = [...document.querySelectorAll('[data-action]')];
   let selectedOption = null;
   let selectedAt = 0;
   let draggingRing = false;
   let lastSave = 0;
+  let lastDiagnostics = 0;
+  let displayRing = 0;
+  let pointer = null;
+  let displayedPointer = null;
+  let pinchLock = null;
+  let pinchLockAt = 0;
+  let characterStride = 0;
+  let lastDrawnRingProgress = -1;
+  let lastMetrics = 0;
+  let averageRenderMs = 0;
   const SAVE_KEY = 'the-fifth-season-save-v1';
 
   function readSave() {
@@ -57,7 +71,7 @@
     if (!button || button.disabled) return;
     selectedOption = button;
     selectedAt = performance.now();
-    menuButtons.forEach(option => option.classList.toggle('selected', option === button));
+    if (!button.classList.contains('selected')) menuButtons.forEach(option => option.classList.toggle('selected', option === button));
   }
   function activateOption(button) {
     if (scene !== 'menu' || !button || button.disabled) return;
@@ -72,7 +86,7 @@
       if (save.scene === 'playing') {
         hero.x = Math.max(30, Math.min(level.width - 30, save.x));
         save.collected.filter(i => Number.isInteger(i) && i >= 0 && i < level.embers.length).forEach(i => collected.add(i));
-        $('#count').textContent = `${collected.size} / 10`;
+        updateCount();
         cameraX = Math.max(0, hero.x - width / (height / 800) * .395);
         saveGame();
       }
@@ -89,10 +103,12 @@
   function resize() {
     width = Math.max(1, innerWidth);
     height = Math.max(1, innerHeight);
-    const ratio = Math.min(devicePixelRatio || 1, 2);
+    // Bound the fill rate on high-DPI/4K displays instead of rendering 8M pixels.
+    const ratio = Math.min(devicePixelRatio || 1, 1.5, Math.sqrt(2400000 / (width * height)));
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    for (const key of Object.keys(cached)) delete cached[key];
   }
   resize();
   addEventListener('resize', resize);
@@ -114,7 +130,8 @@
     $('#touch').hidden = next !== 'playing';
     $('#finger-light').hidden = true;
     $('#second-light').hidden = true;
-    ring.release(); pinch.reset();
+    ring.release(); pinch.reset(); pinchLock = null; pointer = null;
+    particles.length = 0;
     selectedOption = null;
     menuButtons.forEach(option => option.classList.remove('selected'));
     if (next === 'menu') {
@@ -126,7 +143,8 @@
       Object.assign(hero, { x: 450, y: level.ground, vy: 0, grounded: true, face: 1 });
       cameraX = 0;
       collected.clear();
-      $('#count').textContent = '0 / 10';
+      companion.x = hero.x - 55; companion.y = hero.y;
+      updateCount();
     }
     if (next === 'ending') stopCamera();
     saveGame();
@@ -154,6 +172,20 @@
   }
 
   function drawTraveler(c, x, y, scale, moving, facing, light = false) {
+    if (backgrounds.characters) {
+      const image = backgrounds.characters;
+      const pose = moving ? Math.floor(characterStride / 18) % 2 : 0;
+      const frames = [[175, 58, 335, 571], [647, 67, 410, 562]];
+      const [sx, sy, sw, sh] = frames[pose];
+      const h = 92 * scale;
+      const w = h * sw / sh;
+      c.save(); c.translate(x, y); c.scale(facing, 1);
+      const bob = moving && !reducedMotion ? Math.sin(characterStride / 8) * 1.2 : 0;
+      c.translate(0, bob);
+      c.drawImage(image, sx, sy, sw, sh, -w * .64, -h, w, h);
+      c.restore();
+      return;
+    }
     c.save();
     c.translate(x, y);
     c.scale(scale * facing, scale);
@@ -197,7 +229,17 @@
     c.restore();
   }
 
-  function drawCat(c, x, y) {
+  function drawCat(c, x, y, moving = true, facing = 1, scale = 1) {
+    if (backgrounds.characters) {
+      const image = backgrounds.characters;
+      const frame = moving ? 1 + Math.floor(characterStride / 15) % 2 : 0;
+      const [sx, sy, sw, sh] = [[235, 643, 270, 244], [700, 631, 320, 258], [1185, 628, 350, 261]][frame];
+      const h = 35 * scale, w = h * sw / sh;
+      c.save(); c.translate(x, y); c.scale(facing, 1);
+      c.drawImage(image, sx, sy, sw, sh, -w * .5, -h, w, h);
+      c.restore();
+      return;
+    }
     c.save(); c.translate(x, y);
     c.fillStyle = '#b9b9b9';
     c.beginPath(); c.ellipse(-1, -8, 10, 5, 0, 0, Math.PI * 2); c.fill();
@@ -213,7 +255,8 @@
 
   function drawLoading(dt) {
     const target = assetsReady ? 1 : .9;
-    progress = Math.min(target, progress + dt * (assetsReady ? .6 : .27));
+    progress += (target - progress) * (1 - Math.exp(-dt * 2.1));
+    if (assetsReady && progress > .995) progress = 1;
     $('#load-fill').style.width = `${progress * 100}%`;
     $('#walkers').style.left = `${Math.max(.045, progress) * 100}%`;
     const c = $('#walkers').getContext('2d');
@@ -229,10 +272,9 @@
   };
 
   function drawSnow(strength) {
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced) return;
+    if (reducedMotion) return;
     ctx.save();
-    for (let i = 0; i < (strength > 1 ? 150 : 55); i++) {
+    for (let i = 0; i < (strength > 1 ? 80 : 30); i++) {
       const depth = .3 + random(i + 7);
       const gust = 1 + Math.sin(time * .4) * .25;
       const x = ((random(i) * width + time * (50 + depth * 130) * strength * gust) % (width + 80)) - 40;
@@ -256,7 +298,7 @@
   function drawPortal() {
     const image = backgrounds.ring;
     const { x, y, radius } = ringGeometry();
-    ctx.save(); ctx.translate(x, y); ctx.rotate(ring.rotation);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(displayRing);
     if (image) {
       // Crop only the ring from the supplied black plate; keep its original lights.
       ctx.drawImage(image, image.width * .34, image.height * .205,
@@ -268,24 +310,30 @@
       }
     }
     ctx.restore();
-    game.dataset.ringProgress = String(Math.min(1, ring.rotation / (Math.PI * 2)));
+    const measured = Math.round(Math.min(1, ring.rotation / (Math.PI * 2)) * 100);
+    if (measured !== lastDrawnRingProgress) { game.dataset.ringProgress = String(measured / 100); lastDrawnRingProgress = measured; }
   }
   function drawMenu() {
     const image = backgrounds.menu;
     if (!image) return;
-    const scale = Math.max(width / image.width, height / image.height);
-    const w = image.width * scale, h = image.height * scale;
-    ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+    if (!cached.menu) {
+      const plate = document.createElement('canvas'); plate.width = width; plate.height = height;
+      const scale = Math.max(width / image.width, height / image.height);
+      const w = image.width * scale, h = image.height * scale;
+      plate.getContext('2d').drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+      cached.menu = plate;
+    }
+    ctx.drawImage(cached.menu, 0, 0, width, height);
   }
   function moveLight(element, x, y) {
     element.hidden = false;
     element.style.transform = `translate(${x}px, ${y}px)`;
   }
   function pointAt(x, y, now, turnRing) {
-    moveLight($('#finger-light'), x, y);
+    if (!stream) moveLight($('#finger-light'), x, y);
     if (scene === 'portal' && turnRing) {
       const center = ringGeometry();
-      if (ring.move(x, y, center.x, center.y, center.radius, now)) setScene('menu');
+      ring.move(x, y, center.x, center.y, center.radius, now);
     } else if (scene === 'menu') {
       const target = menuButtons.find(button => {
         const rect = button.getBoundingClientRect();
@@ -298,6 +346,18 @@
       }
     }
   }
+  function updateCount() {
+    $('#count').innerHTML = `<span class="leaf-total">${collected.size} / ${level.embers.length}</span><span class="leaf-slots" aria-hidden="true">${level.embers.map((_, i) => `<i class="${collected.has(i) ? 'found' : ''}"></i>`).join('')}</span>`;
+  }
+  function collectibleBurst(x, y) {
+    for (let i = 0; i < 9; i++) {
+      const a = i / 9 * Math.PI * 2;
+      particles.push({ x, y, vx: Math.cos(a) * 34, vy: Math.sin(a) * 25 - 25, age: 0 });
+    }
+    $('#count').classList.remove('collected');
+    void $('#count').offsetWidth;
+    $('#count').classList.add('collected');
+  }
   game.addEventListener('pointermove', event => {
     if (!['portal', 'menu'].includes(scene) || stream) return;
     pointAt(event.clientX, event.clientY, performance.now(), draggingRing);
@@ -307,20 +367,22 @@
   function drawEmber(x, y, seed) {
     y += Math.sin(time * 2 + seed) * 3;
     ctx.save();
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, 23);
-    glow.addColorStop(0, '#fffffbc0');
-    glow.addColorStop(.25, '#fffffb60');
-    glow.addColorStop(1, '#fffffb00');
-    ctx.fillStyle = glow; ctx.fillRect(x - 23, y - 23, 46, 46);
+    if (!cached.leafGlow) {
+      const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 64;
+      const gc = glowCanvas.getContext('2d');
+      const glow = gc.createRadialGradient(32, 32, 2, 32, 32, 32);
+      glow.addColorStop(0, '#e6bd6d99'); glow.addColorStop(1, '#e6bd6d00');
+      gc.fillStyle = glow; gc.fillRect(0, 0, 64, 64); cached.leafGlow = glowCanvas;
+    }
+    ctx.drawImage(cached.leafGlow, x - 32, y - 32);
     ctx.translate(x, y); ctx.rotate(Math.sin(time + seed) * .15);
-    ctx.fillStyle = '#fffffc';
+    ctx.fillStyle = '#396667'; ctx.strokeStyle = '#f4c875'; ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(0, 3);
-    ctx.bezierCurveTo(-4, 0, -11, -9, -8, -10);
-    ctx.quadraticCurveTo(-3, -9, 0, -4);
-    ctx.quadraticCurveTo(4, -13, 9, -11);
-    ctx.quadraticCurveTo(9, -2, 0, 3);
-    ctx.fill();
+    ctx.moveTo(-2, 11);
+    ctx.bezierCurveTo(-17, -1, -9, -12, 10, -15);
+    ctx.bezierCurveTo(15, -1, 11, 7, -2, 11);
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-5, 16); ctx.quadraticCurveTo(0, -1, 8, -11); ctx.stroke();
     ctx.restore();
   }
 
@@ -333,13 +395,18 @@
     // Mirrored adjoining plates keep the bank continuous and prevent hard seams.
     const offset = scene === 'playing' ? cameraX : 0;
     if (image) {
+      if (!cached.forest) {
+        const plate = document.createElement('canvas'); plate.width = Math.ceil(tile); plate.height = 800;
+        plate.getContext('2d').drawImage(image, 0, 0, plate.width, 800); cached.forest = plate;
+      }
       const start = Math.floor(offset / tile);
-      for (let i = start; i <= start + 2; i++) {
+      const end = Math.floor((offset + view) / tile);
+      for (let i = start; i <= end; i++) {
         const x = i * tile - offset;
         ctx.save();
         if (i % 2) { ctx.translate(x + tile, 0); ctx.scale(-1, 1); }
         else ctx.translate(x, 0);
-        ctx.drawImage(image, 0, 0, tile + 1, 800);
+        ctx.drawImage(cached.forest, 0, 0, tile + 1, 800);
         ctx.restore();
       }
     }
@@ -347,13 +414,22 @@
     if (scene === 'tutorial' || scene === 'mission') {
       const x = Math.min(view * .395, 480);
       drawTraveler(ctx, x, 620, 1.15, false, 1);
+      drawCat(ctx, x - 48, 620, false, 1, 1.1);
       [80, 145, 205].forEach((dx, i) => drawEmber(x + dx, 565 - i * 13, i));
     } else {
       level.embers.forEach((ember, index) => {
+        if (ember.x < cameraX - 40 || ember.x > cameraX + view + 40) return;
         if (!collected.has(index)) drawEmber(ember.x, ember.y, index);
       });
       drawTraveler(ctx, hero.x, hero.y, 1.15, Math.abs(direction()) > 0, hero.face);
+      drawCat(ctx, companion.x, companion.y, Math.abs(companion.x - hero.x) > 50, hero.face, 1.1);
     }
+    for (const particle of particles) {
+      ctx.globalAlpha = Math.max(0, 1 - particle.age / .7);
+      ctx.fillStyle = '#e3b768';
+      ctx.beginPath(); ctx.arc(particle.x, particle.y, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
     ctx.restore();
     drawSnow(.5);
   }
@@ -370,9 +446,9 @@
     if (move) hero.face = move;
     step(hero, move, dt);
     level.embers.forEach((ember, index) => {
-      if (!collected.has(index) && Math.hypot(hero.x - ember.x, hero.y - 42 - ember.y) < 40) {
+      if (!collected.has(index) && Math.hypot(hero.x - ember.x, hero.y - 42 - ember.y) < 48) {
         collected.add(index);
-        $('#count').textContent = `${collected.size} / 10`;
+        updateCount(); collectibleBurst(ember.x, ember.y);
       }
     });
     const visible = width / (height / 800);
@@ -380,17 +456,36 @@
     cameraX += (target - cameraX) * Math.min(1, dt * 5);
     if (collected.size === 10 && hero.x > 4900) setScene('ending');
     // These DOM values allow QA to read actual game state without changing it.
-    game.dataset.playerX = hero.x.toFixed(1);
-    game.dataset.playerY = hero.y.toFixed(1);
-    game.dataset.collected = String(collected.size);
-    if (time - lastSave > .5) { saveGame(); lastSave = time; }
+    companion.x += (hero.x - hero.face * 55 - companion.x) * (1 - Math.exp(-dt * 4));
+    companion.y += (hero.y - companion.y) * (1 - Math.exp(-dt * 7));
+    characterStride += Math.abs(move) * level.speed * dt;
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i]; p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.age > .7) particles.splice(i, 1);
+    }
+    if (time - lastDiagnostics > .15) {
+      game.dataset.playerX = hero.x.toFixed(1); game.dataset.playerY = hero.y.toFixed(1);
+      game.dataset.collected = String(collected.size); lastDiagnostics = time;
+    }
+    if (time - lastSave > 2) { saveGame(); lastSave = time; }
   }
 
   function render(now) {
+    const renderStart = performance.now();
     const dt = Math.min((now - previousFrame) / 1000 || 0, .06);
     previousFrame = now;
     time += dt;
     sceneAge += dt;
+    if (scene === 'loading') characterStride += dt * 105;
+    displayRing = ring.smooth(dt);
+    if (scene === 'portal' && displayRing >= Math.PI * 2 - .09) setScene('menu');
+    if (pointer && ['portal', 'menu'].includes(scene)) {
+      if (!displayedPointer) displayedPointer = { ...pointer };
+      const ease = 1 - Math.exp(-dt * 25);
+      displayedPointer.x += (pointer.x - displayedPointer.x) * ease;
+      displayedPointer.y += (pointer.y - displayedPointer.y) * ease;
+      moveLight($('#finger-light'), displayedPointer.x, displayedPointer.y);
+    }
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
     if (scene === 'portal') drawPortal();
     else if (scene === 'menu') drawMenu();
@@ -408,6 +503,12 @@
       ctx.fillStyle = `rgba(0,0,0,${fade})`;
       ctx.fillRect(0, 0, width, height);
     }
+    averageRenderMs = averageRenderMs * .9 + (performance.now() - renderStart) * .1;
+    if (time - lastMetrics > 1) {
+      game.dataset.renderMs = averageRenderMs.toFixed(2);
+      game.dataset.leafCount = String(level.embers.length);
+      lastMetrics = time;
+    }
     requestAnimationFrame(render);
   }
 
@@ -415,7 +516,7 @@
   addEventListener('keydown', (event) => {
     if (event.code === 'Escape') { saveGame(); setScene('menu'); return; }
     if (scene === 'portal') {
-      if (event.code === 'Enter') setScene('menu');
+      if (event.code === 'Enter') { event.preventDefault(); setScene('menu'); }
       return;
     }
     if (scene === 'menu') {
@@ -482,29 +583,23 @@
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera unavailable');
       // The game itself does not depend on this optional network import.
-      const modelPromise = (async () => {
-        if (landmarker) return landmarker;
-        const { HandLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs');
-        const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm');
-        return HandLandmarker.createFromOptions(files, {
-          baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' },
-          runningMode: 'VIDEO', numHands: 2
-        });
-      })();
+      const modelPromise = landmarker ? Promise.resolve(landmarker) : globalThis.FifthSeasonHandTracker.create();
       let timeout;
       try {
         landmarker = await Promise.race([modelPromise, new Promise((_, reject) => {
-          timeout = setTimeout(() => reject(new Error('Model download timeout')), 25000);
+          timeout = setTimeout(() => reject(new Error('Model download timeout')), 45000);
         })]);
       } finally { clearTimeout(timeout); }
+      game.dataset.trackingThread = landmarker.threaded ? 'worker' : 'gpu-fallback';
       if (generation !== cameraGeneration) return;
-      const opened = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360, facingMode: 'user' }, audio: false });
+      const opened = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, frameRate: { ideal: 24, max: 30 }, facingMode: 'user' }, audio: false });
       if (generation !== cameraGeneration) { opened.getTracks().forEach(track => track.stop()); return; }
       stream = opened;
       $('#video').srcObject = stream;
       await $('#video').play();
       $('#camera-panel').hidden = false;
       $('#camera').title = '关闭手势摄像头';
+      game.dataset.trackingThread = landmarker.threaded ? 'worker' : 'gpu-fallback';
       lastHandFrame = -1;
       requestAnimationFrame(detectHands);
     } catch (error) {
@@ -522,19 +617,22 @@
     }
   };
 
-  function detectHands(now) {
+  async function detectHands(now) {
     if (!stream) return;
     const video = $('#video');
+    const generation = cameraGeneration;
     try {
-      if (video.currentTime !== lastHandFrame && now - lastDetection > 65) {
+      if (video.currentTime !== lastHandFrame && now - lastDetection > (landmarker.threaded ? 32 : 90)) {
         lastHandFrame = video.currentTime;
         lastDetection = now;
-        const hands = landmarker.detectForVideo(video, now).landmarks;
+        const hands = await landmarker.detect(video, now);
+        if (!stream || generation !== cameraGeneration) return;
         const p = hands[0];
         if (!p || document.hidden) {
           handDirection = 0; handWasPointing = false; swipeOrigin = null;
           $('#hand-indicator').textContent = '·';
           $('#finger-light').hidden = true; $('#second-light').hidden = true;
+          pointer = null; displayedPointer = null;
           ring.release(); pinch.reset();
         } else {
           const extended = [8, 12, 16, 20].map(tip =>
@@ -550,13 +648,21 @@
               Math.hypot(hand[6].x - hand[0].x, hand[6].y - hand[0].y) * 1.12 ||
               Math.hypot(hand[4].x - hand[8].x, hand[4].y - hand[8].y) < .07);
             const primary = pointing[0];
-            if (primary) pointAt((1 - primary[8].x) * width, primary[8].y * height, now, true);
-            else { $('#finger-light').hidden = true; ring.release(); }
+            const closing = hands.some(hand => Math.hypot(hand[4].x - hand[8].x, hand[4].y - hand[8].y) /
+              Math.max(.025, Math.hypot(hand[0].x - hand[9].x, hand[0].y - hand[9].y)) < .6);
+            if (scene === 'menu' && closing && !pinchLock && selectedOption && now - selectedAt < 1800) {
+              pinchLock = selectedOption; pinchLockAt = now;
+            }
+            if (!closing) pinchLock = null;
+            if (primary) {
+              pointer = { x: (1 - primary[8].x) * width, y: primary[8].y * height };
+              if (!pinchLock || scene === 'portal') pointAt(pointer.x, pointer.y, now, true);
+            } else { pointer = null; $('#finger-light').hidden = true; ring.release(); }
             if (pointing[1]) {
               const second = pointing[1];
               const sx = (1 - second[8].x) * width, sy = second[8].y * height;
               moveLight($('#second-light'), sx, sy);
-              if (scene === 'menu') {
+              if (scene === 'menu' && !pinchLock) {
                 const button = menuButtons.find(option => {
                   const rect = option.getBoundingClientRect();
                   return sx >= rect.left && sx <= rect.right && sy >= rect.top && sy <= rect.bottom;
@@ -564,8 +670,9 @@
                 if (button) chooseOption(button);
               }
             } else $('#second-light').hidden = true;
-            if (scene === 'menu' && pinch.update(hands, now) && selectedOption && now - selectedAt < 1500) {
-              activateOption(selectedOption);
+            if (scene === 'menu' && pinch.update(hands, now)) {
+              const target = pinchLock && now - pinchLockAt < 2500 ? pinchLock : selectedOption;
+              if (target && now - selectedAt < 2500) activateOption(target);
             }
             handDirection = 0;
             requestAnimationFrame(detectHands);
@@ -602,7 +709,7 @@
   const fontReady = document.fonts.load('32px Palmetto').then(fonts => {
     game.dataset.fontLoaded = String(fonts.length > 0);
   }).catch(() => { game.dataset.fontLoaded = 'false'; });
-  Promise.all([loadImage('forest'), loadImage('winter'), loadImage('ring'), loadImage('menu'), fontReady]).then(() => { assetsReady = true; });
+  Promise.all([loadImage('forest'), loadImage('winter'), loadImage('ring'), loadImage('menu'), loadImage('characters'), fontReady]).then(() => { assetsReady = true; });
   // Never leave the loading bar permanently blocked by a font or asset request.
   setTimeout(() => { assetsReady = true; }, 6000);
   requestAnimationFrame(render);

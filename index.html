@@ -43,7 +43,7 @@
     <section id="ending" hidden><h1>The Fifth Season</h1><button id="restart" aria-label="Restart">↺</button></section>
     <button id="next" hidden aria-label="Continue">→</button>
     <output id="count" hidden aria-label="Embers collected">0 / 10</output>
-    <button id="camera" aria-label="Enable hand gestures" title="开启手势摄像头：食指顺时针绕一圈进入；菜单悬停后双手捏合确认">
+    <button id="camera" aria-label="Enable hand gestures" title="开启手势摄像头：食指顺时针绕一圈进入；悬停后单手拇指与食指捏合确认">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>
     </button>
     <div id="camera-panel" hidden>
@@ -60,6 +60,7 @@
   <!-- Classic scripts also run when index.html is opened directly. -->
   <script defer src="level.js"></script>
   <script defer src="interaction.js"></script>
+  <script defer src="hand-tracker.js"></script>
   <script defer src="game.js"></script>
 </body>
 </html>
