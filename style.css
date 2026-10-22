@@ -58,3 +58,17 @@ video { width: 100%; display: block; transform: scaleX(-1); opacity: .7; }
   #game[data-scene="story"] #camera, #game[data-scene="tutorial"] #camera, #game[data-scene="mission"] #camera { right: 17%; }
 }
 @media (prefers-reduced-motion: reduce) { section, #story h1, #story p { animation-duration: .1s !important; animation-delay: 0s !important; } }
+/* Entrance and main menu use the user's original images. */
+#portal { inset: 0; display: grid; place-items: center; }
+#portal h1 { font-size: clamp(17px, 2vmin, 25px); margin-top: -1vmin; }
+#portal-key:focus-visible { width: auto; height: auto; clip-path: none; bottom: 5%; }
+#menu { inset: 0; display: flex; flex-direction: column; align-items: center; padding-top: 24vh; animation: fade-in 1.5s both; }
+#menu h1 { font-size: clamp(35px, 6.5vw, 100px); letter-spacing: .03em; white-space: nowrap; text-shadow: 0 0 18px #ffffff30; }
+#menu nav { pointer-events: auto; display: flex; flex-direction: column; align-items: center; margin-top: 2vh; gap: 4px; }
+#menu button { font-size: clamp(19px, 1.9vw, 29px); line-height: 1.15; padding: 8px 24px; min-width: 155px; transition: transform .23s, text-shadow .23s, opacity .23s; text-shadow: 0 1px 7px #627b9390; }
+#menu button:hover, #menu button.selected, #menu button:focus-visible { transform: scale(1.16); text-shadow: 0 0 5px white, 0 0 15px white, 0 0 30px #fff; }
+#menu button:disabled { opacity: .35; cursor: default; transform: none; text-shadow: none; }
+.finger-light { position: absolute; left: 0; top: 0; width: 13px; height: 13px; margin: -6.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 7px 3px #fff, 0 0 20px 7px #f1eaffaa, 0 0 45px 16px #d1c4fb44; pointer-events: none; z-index: 10; mix-blend-mode: screen; }
+.finger-light::after { content: ''; position: absolute; inset: -8px; border: 1px solid #fff7; border-radius: 50%; }
+#game[data-scene="portal"] #camera, #game[data-scene="menu"] #camera { right: 4%; color: white; }
+@media(max-aspect-ratio:1/1) { #menu { padding-top: 29vh; } #menu h1 { font-size: 8vw; } #menu nav { margin-top: 4vh; } }

@@ -11,7 +11,7 @@
   const keys = new Set();
   const collected = new Set();
   const backgrounds = {};
-  let scene = 'loading';
+  let scene = 'portal';
   let sceneAge = 0;
   let time = 0;
   let previousFrame = 0;
@@ -32,6 +32,59 @@
   let lastDetection = 0;
   let swipeOrigin = null;
   let lastAdvance = 0;
+  const ring = new globalThis.FifthSeasonInput.ClockwiseRing();
+  const pinch = new globalThis.FifthSeasonInput.TwoHandPinch();
+  const menuButtons = [...document.querySelectorAll('[data-action]')];
+  let selectedOption = null;
+  let selectedAt = 0;
+  let draggingRing = false;
+  let lastSave = 0;
+  const SAVE_KEY = 'the-fifth-season-save-v1';
+
+  function readSave() {
+    try {
+      const save = JSON.parse(localStorage.getItem(SAVE_KEY));
+      if (!save || !['story', 'tutorial', 'mission', 'playing'].includes(save.scene)) return null;
+      if (save.scene === 'playing' && (!Number.isFinite(save.x) || !Array.isArray(save.collected))) return null;
+      return save;
+    } catch { return null; }
+  }
+  function saveGame() {
+    if (!['story', 'tutorial', 'mission', 'playing'].includes(scene)) return;
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ scene, x: hero.x, collected: [...collected] })); } catch { /* Private mode can disable storage. */ }
+  }
+  function chooseOption(button) {
+    if (!button || button.disabled) return;
+    selectedOption = button;
+    selectedAt = performance.now();
+    menuButtons.forEach(option => option.classList.toggle('selected', option === button));
+  }
+  function activateOption(button) {
+    if (scene !== 'menu' || !button || button.disabled) return;
+    if (button.dataset.action === 'new') {
+      try { localStorage.removeItem(SAVE_KEY); } catch { /* Optional storage. */ }
+      setScene('loading');
+      progress = 0;
+    } else if (button.dataset.action === 'continue') {
+      const save = readSave();
+      if (!save) return;
+      setScene(save.scene);
+      if (save.scene === 'playing') {
+        hero.x = Math.max(30, Math.min(level.width - 30, save.x));
+        save.collected.filter(i => Number.isInteger(i) && i >= 0 && i < level.embers.length).forEach(i => collected.add(i));
+        $('#count').textContent = `${collected.size} / 10`;
+        cameraX = Math.max(0, hero.x - width / (height / 800) * .395);
+        saveGame();
+      }
+    } else {
+      stopCamera(); ring.reset(); setScene('portal');
+    }
+  }
+  menuButtons.forEach(button => {
+    button.addEventListener('pointerenter', () => chooseOption(button));
+    button.addEventListener('focus', () => chooseOption(button));
+    button.onclick = () => activateOption(button);
+  });
 
   function resize() {
     width = Math.max(1, innerWidth);
@@ -52,13 +105,23 @@
     handDirection = 0;
     swipeOrigin = null;
     game.dataset.scene = next;
-    for (const name of ['loading', 'title', 'story', 'tutorial', 'mission', 'ending']) {
+    for (const name of ['portal', 'menu', 'loading', 'title', 'story', 'tutorial', 'mission', 'ending']) {
       $('#' + name).hidden = name !== next;
     }
     $('#next').hidden = !['story', 'tutorial', 'mission'].includes(next);
     $('#camera').hidden = ['loading', 'title', 'ending'].includes(next);
     $('#count').hidden = next !== 'playing';
     $('#touch').hidden = next !== 'playing';
+    $('#finger-light').hidden = true;
+    $('#second-light').hidden = true;
+    ring.release(); pinch.reset();
+    selectedOption = null;
+    menuButtons.forEach(option => option.classList.remove('selected'));
+    if (next === 'menu') {
+      const resume = $('[data-action="continue"]');
+      resume.disabled = !readSave();
+      resume.title = resume.disabled ? '暂无存档' : '继续上次的旅程';
+    }
     if (next === 'playing') {
       Object.assign(hero, { x: 450, y: level.ground, vy: 0, grounded: true, face: 1 });
       cameraX = 0;
@@ -66,10 +129,12 @@
       $('#count').textContent = '0 / 10';
     }
     if (next === 'ending') stopCamera();
+    saveGame();
   }
 
   function advance() {
     if (sceneAge < .65) return;
+    if (scene === 'portal' || scene === 'menu') return;
     if (scene === 'title') setScene('story');
     else if (scene === 'story') setScene('tutorial');
     else if (scene === 'tutorial') setScene('mission');
@@ -78,6 +143,7 @@
   $('#next').onclick = advance;
   $('#restart').onclick = () => setScene('playing');
   canvas.addEventListener('click', advance);
+  $('#portal-key').onclick = () => setScene('menu');
 
   function shape(c, points, fill) {
     c.beginPath();
@@ -154,7 +220,7 @@
     c.clearRect(0, 0, 240, 130);
     drawTraveler(c, 206, 128, 1.25, true, 1, true);
     drawCat(c, 133, 128);
-    if (progress >= 1 && sceneAge > 2.5) setScene('title');
+    if (progress >= 1 && sceneAge > 2.5) setScene('story');
   }
 
   const random = (seed) => {
@@ -183,6 +249,60 @@
     if (image) ctx.drawImage(image, 0, 0, width, height);
     drawSnow(1.6);
   }
+
+  function ringGeometry() {
+    return { x: width / 2, y: height / 2, radius: Math.min(width, height) * .27 };
+  }
+  function drawPortal() {
+    const image = backgrounds.ring;
+    const { x, y, radius } = ringGeometry();
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ring.rotation);
+    if (image) {
+      // Crop only the ring from the supplied black plate; keep its original lights.
+      ctx.drawImage(image, image.width * .34, image.height * .205,
+        image.width * .32, image.height * .57, -radius * 1.06, -radius * 1.06, radius * 2.12, radius * 2.12);
+    } else {
+      ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
+      for (const factor of [1, .96, .82, .72]) {
+        ctx.beginPath(); ctx.arc(0, 0, radius * factor, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    ctx.restore();
+    game.dataset.ringProgress = String(Math.min(1, ring.rotation / (Math.PI * 2)));
+  }
+  function drawMenu() {
+    const image = backgrounds.menu;
+    if (!image) return;
+    const scale = Math.max(width / image.width, height / image.height);
+    const w = image.width * scale, h = image.height * scale;
+    ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+  }
+  function moveLight(element, x, y) {
+    element.hidden = false;
+    element.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  function pointAt(x, y, now, turnRing) {
+    moveLight($('#finger-light'), x, y);
+    if (scene === 'portal' && turnRing) {
+      const center = ringGeometry();
+      if (ring.move(x, y, center.x, center.y, center.radius, now)) setScene('menu');
+    } else if (scene === 'menu') {
+      const target = menuButtons.find(button => {
+        const rect = button.getBoundingClientRect();
+        return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+      });
+      if (target) chooseOption(target);
+      else if (now - selectedAt > 1000) {
+        selectedOption = null;
+        menuButtons.forEach(button => button.classList.remove('selected'));
+      }
+    }
+  }
+  game.addEventListener('pointermove', event => {
+    if (!['portal', 'menu'].includes(scene) || stream) return;
+    pointAt(event.clientX, event.clientY, performance.now(), draggingRing);
+  });
+  game.addEventListener('pointerleave', () => { $('#finger-light').hidden = true; ring.release(); });
 
   function drawEmber(x, y, seed) {
     y += Math.sin(time * 2 + seed) * 3;
@@ -263,6 +383,7 @@
     game.dataset.playerX = hero.x.toFixed(1);
     game.dataset.playerY = hero.y.toFixed(1);
     game.dataset.collected = String(collected.size);
+    if (time - lastSave > .5) { saveGame(); lastSave = time; }
   }
 
   function render(now) {
@@ -271,7 +392,9 @@
     time += dt;
     sceneAge += dt;
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
-    if (scene === 'loading') drawLoading(dt);
+    if (scene === 'portal') drawPortal();
+    else if (scene === 'menu') drawMenu();
+    else if (scene === 'loading') drawLoading(dt);
     else if (scene === 'title') { if (sceneAge > 2) setScene('story'); }
     else if (scene === 'story') drawWinter();
     else if (scene !== 'ending') {
@@ -290,6 +413,21 @@
 
   function clearInput() { keys.clear(); handDirection = 0; swipeOrigin = null; }
   addEventListener('keydown', (event) => {
+    if (event.code === 'Escape') { saveGame(); setScene('menu'); return; }
+    if (scene === 'portal') {
+      if (event.code === 'Enter') setScene('menu');
+      return;
+    }
+    if (scene === 'menu') {
+      if (['ArrowDown', 'ArrowUp'].includes(event.code)) {
+        event.preventDefault();
+        const available = menuButtons.filter(button => !button.disabled);
+        const i = available.indexOf(selectedOption);
+        const next = available[(i + (event.code === 'ArrowDown' ? 1 : -1) + available.length) % available.length];
+        chooseOption(next); next.focus();
+      } else if (event.code === 'Enter' && !(event.target instanceof HTMLButtonElement)) activateOption(selectedOption);
+      return;
+    }
     if (event.target instanceof HTMLButtonElement && event.code === 'Space') return;
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(event.code)) event.preventDefault();
     keys.add(event.code);
@@ -308,11 +446,16 @@
     button.onpointerup = button.onpointercancel = button.onlostpointercapture = () => keys.delete(button.dataset.key);
   }
   let swipeStart = null;
-  canvas.addEventListener('pointerdown', (event) => { swipeStart = { x: event.clientX, y: event.clientY }; });
+  canvas.addEventListener('pointerdown', (event) => {
+    if (scene === 'portal') { draggingRing = true; ring.release(); canvas.setPointerCapture(event.pointerId); pointAt(event.clientX, event.clientY, performance.now(), true); }
+    swipeStart = { x: event.clientX, y: event.clientY };
+  });
   canvas.addEventListener('pointerup', (event) => {
     if (swipeStart && event.clientX - swipeStart.x > 80 && Math.abs(event.clientY - swipeStart.y) < 100) advance();
     swipeStart = null;
+    draggingRing = false; ring.release();
   });
+  canvas.addEventListener('pointercancel', () => { draggingRing = false; ring.release(); });
 
   function stopCamera() {
     cameraGeneration++;
@@ -324,6 +467,8 @@
     handDirection = 0;
     handWasPointing = false;
     swipeOrigin = null;
+    $('#finger-light').hidden = true; $('#second-light').hidden = true;
+    ring.release(); pinch.reset();
   }
   $('#close-camera').onclick = stopCamera;
 
@@ -343,7 +488,7 @@
         const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm');
         return HandLandmarker.createFromOptions(files, {
           baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' },
-          runningMode: 'VIDEO', numHands: 1
+          runningMode: 'VIDEO', numHands: 2
         });
       })();
       let timeout;
@@ -384,10 +529,13 @@
       if (video.currentTime !== lastHandFrame && now - lastDetection > 65) {
         lastHandFrame = video.currentTime;
         lastDetection = now;
-        const p = landmarker.detectForVideo(video, now).landmarks[0];
+        const hands = landmarker.detectForVideo(video, now).landmarks;
+        const p = hands[0];
         if (!p || document.hidden) {
           handDirection = 0; handWasPointing = false; swipeOrigin = null;
           $('#hand-indicator').textContent = '·';
+          $('#finger-light').hidden = true; $('#second-light').hidden = true;
+          ring.release(); pinch.reset();
         } else {
           const extended = [8, 12, 16, 20].map(tip =>
             Math.hypot(p[tip].x - p[0].x, p[tip].y - p[0].y) >
@@ -395,6 +543,34 @@
           const open = extended.every(Boolean);
           const point = extended[0] && !extended[1] && !extended[2] && !extended[3] && p[8].y < p[6].y;
           const x = 1 - (p[0].x + p[9].x) / 2;
+          if (['portal', 'menu'].includes(scene)) {
+            // Both index tips get a glow; either can select a menu option.
+            const pointing = hands.filter(hand =>
+              Math.hypot(hand[8].x - hand[0].x, hand[8].y - hand[0].y) >
+              Math.hypot(hand[6].x - hand[0].x, hand[6].y - hand[0].y) * 1.12 ||
+              Math.hypot(hand[4].x - hand[8].x, hand[4].y - hand[8].y) < .07);
+            const primary = pointing[0];
+            if (primary) pointAt((1 - primary[8].x) * width, primary[8].y * height, now, true);
+            else { $('#finger-light').hidden = true; ring.release(); }
+            if (pointing[1]) {
+              const second = pointing[1];
+              const sx = (1 - second[8].x) * width, sy = second[8].y * height;
+              moveLight($('#second-light'), sx, sy);
+              if (scene === 'menu') {
+                const button = menuButtons.find(option => {
+                  const rect = option.getBoundingClientRect();
+                  return sx >= rect.left && sx <= rect.right && sy >= rect.top && sy <= rect.bottom;
+                });
+                if (button) chooseOption(button);
+              }
+            } else $('#second-light').hidden = true;
+            if (scene === 'menu' && pinch.update(hands, now) && selectedOption && now - selectedAt < 1500) {
+              activateOption(selectedOption);
+            }
+            handDirection = 0;
+            requestAnimationFrame(detectHands);
+            return;
+          }
           handDirection = open ? (x < .38 ? -1 : x > .62 ? 1 : 0) : 0;
           if (point && !handWasPointing && scene === 'playing') jump(hero);
           handWasPointing = point;
@@ -413,7 +589,7 @@
     }
     requestAnimationFrame(detectHands);
   }
-  addEventListener('pagehide', stopCamera);
+  addEventListener('pagehide', () => { saveGame(); stopCamera(); });
 
   function loadImage(name) {
     return new Promise(resolve => {
@@ -426,7 +602,7 @@
   const fontReady = document.fonts.load('32px Palmetto').then(fonts => {
     game.dataset.fontLoaded = String(fonts.length > 0);
   }).catch(() => { game.dataset.fontLoaded = 'false'; });
-  Promise.all([loadImage('forest'), loadImage('winter'), fontReady]).then(() => { assetsReady = true; });
+  Promise.all([loadImage('forest'), loadImage('winter'), loadImage('ring'), loadImage('menu'), fontReady]).then(() => { assetsReady = true; });
   // Never leave the loading bar permanently blocked by a font or asset request.
   setTimeout(() => { assetsReady = true; }, 6000);
   requestAnimationFrame(render);

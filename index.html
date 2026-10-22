@@ -9,9 +9,23 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main id="game" data-scene="loading" aria-label="The Fifth Season">
+  <main id="game" data-scene="portal" aria-label="The Fifth Season">
     <canvas id="world" aria-label="Snowy forest game"></canvas>
-    <section id="loading" aria-label="Loading">
+    <section id="portal" aria-label="Clockwise ring entrance">
+      <h1>The Fifith Season</h1>
+      <button id="portal-key" class="sr-only" aria-label="Enter the main menu">Enter</button>
+    </section>
+    <section id="menu" hidden aria-label="Main menu">
+      <h1>THE FIFTH SEASON</h1>
+      <nav aria-label="Game options">
+        <button data-action="new">New game</button>
+        <button data-action="continue">continue</button>
+        <button data-action="exit">exist game</button>
+      </nav>
+    </section>
+    <div id="finger-light" class="finger-light" hidden></div>
+    <div id="second-light" class="finger-light" hidden></div>
+    <section id="loading" hidden aria-label="Loading">
       <div class="load-track"><div id="load-fill"></div><canvas id="walkers" width="240" height="130"></canvas></div>
     </section>
     <section id="title" hidden><h1>The Fifth Season</h1></section>
@@ -29,7 +43,7 @@
     <section id="ending" hidden><h1>The Fifth Season</h1><button id="restart" aria-label="Restart">↺</button></section>
     <button id="next" hidden aria-label="Continue">→</button>
     <output id="count" hidden aria-label="Embers collected">0 / 10</output>
-    <button id="camera" hidden aria-label="Enable hand gestures" title="开启手势摄像头">
+    <button id="camera" aria-label="Enable hand gestures" title="开启手势摄像头：食指顺时针绕一圈进入；菜单悬停后双手捏合确认">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>
     </button>
     <div id="camera-panel" hidden>
@@ -45,6 +59,7 @@
   </main>
   <!-- Classic scripts also run when index.html is opened directly. -->
   <script defer src="level.js"></script>
+  <script defer src="interaction.js"></script>
   <script defer src="game.js"></script>
 </body>
 </html>
